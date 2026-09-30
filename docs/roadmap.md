@@ -42,7 +42,10 @@ So sánh trạng thái hiện tại với các giai đoạn lịch sử tương 
 
 ## Vận hành / hạ tầng (track song song, làm khi có nhu cầu)
 
-- [ ] Lên online: collectors → GitHub Actions cron, SQLite → Turso ([kien-truc.md](kien-truc.md) §1)
+- [x] Đẩy code lên GitHub: https://github.com/voquan/market-monitor (30/09/2026; .env và data/ không lên repo)
+- [ ] GitHub Actions cron cho collectors + brief (cần thêm secrets FRED_API_KEY, GEMINI_API_KEY vào repo settings)
+- [ ] Nơi chứa dữ liệu khi chạy online: Turso, hoặc commit db vào repo private ([kien-truc.md](kien-truc.md) §1)
+- [ ] Nơi xem dashboard online (Vercel/Fly, hoặc static export + GitHub Pages)
 - Backlog chỉ số mới: xem [khung-danh-gia.md](khung-danh-gia.md) (FedWatch, exchange netflow, ETH/BTC...)
 
 ---
