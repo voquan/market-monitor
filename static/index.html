@@ -1,0 +1,774 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Market Monitor</title>
+<style>
+:root {
+  color-scheme: light;
+  --surface-1: #fcfcfb;
+  --surface-2: #f6f6f3;   /* nền tile lồng trong card */
+  --page: #f9f9f7;
+  --ink-1: #0b0b0b;
+  --ink-2: #52514e;
+  --ink-muted: #898781;
+  --grid: #e1e0d9;
+  --baseline: #c3c2b7;
+  --border: rgba(11,11,11,0.10);
+  --series-1: #2a78d6;        /* sparkline accent */
+  --series-dim: #9ec5f4;      /* sparkline de-emphasis (seq step 200) */
+  --delta-good: #006300;
+  --delta-bad: #d03b3b;
+  --status-warning: #fab219;
+  --status-serious: #ec835a;
+  --status-critical: #d03b3b;
+  --status-good: #0ca30c;
+}
+@media (prefers-color-scheme: dark) {
+  :root:where(:not([data-theme="light"])) {
+    color-scheme: dark;
+    --surface-1: #1a1a19;
+    --surface-2: #232322;
+    --page: #0d0d0d;
+    --ink-1: #ffffff;
+    --ink-2: #c3c2b7;
+    --ink-muted: #898781;
+    --grid: #2c2c2a;
+    --baseline: #383835;
+    --border: rgba(255,255,255,0.10);
+    --series-1: #3987e5;
+    --series-dim: #1c5cab;
+    --delta-good: #0ca30c;
+    --delta-bad: #e66767;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --surface-1: #1a1a19;
+  --surface-2: #232322;
+  --page: #0d0d0d;
+  --ink-1: #ffffff;
+  --ink-2: #c3c2b7;
+  --ink-muted: #898781;
+  --grid: #2c2c2a;
+  --baseline: #383835;
+  --border: rgba(255,255,255,0.10);
+  --series-1: #3987e5;
+  --series-dim: #1c5cab;
+  --delta-good: #0ca30c;
+  --delta-bad: #e66767;
+}
+
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--page);
+  color: var(--ink-1);
+  font: 14px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+.wrap { max-width: 1180px; margin: 0 auto; padding: 20px 16px 48px; }
+
+header.top {
+  display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+header.top h1 { font-size: 16px; font-weight: 600; margin: 0; }
+header.top .meta { color: var(--ink-muted); font-size: 12px; }
+header.top .spacer { flex: 1; }
+button.ghost {
+  background: none; border: 1px solid var(--border); border-radius: 6px;
+  color: var(--ink-2); padding: 4px 10px; font: inherit; font-size: 12px;
+  cursor: pointer;
+}
+button.ghost:hover { background: var(--surface-1); }
+
+/* ── ① header strip ── */
+.hero-strip {
+  display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 12px;
+  margin-bottom: 12px;
+}
+.card {
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 14px 16px;
+}
+.hero-value { font-size: 48px; font-weight: 600; line-height: 1.1; }
+.hero-sub { display: flex; gap: 10px; align-items: center; margin-top: 4px; flex-wrap: wrap; }
+
+/* ── section blocks ── */
+.blocks { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.block h2 {
+  font-size: 12px; font-weight: 600; letter-spacing: .04em;
+  text-transform: uppercase; color: var(--ink-muted); margin: 0 0 10px;
+}
+.tiles { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+
+/* ── stat tile: box riêng, viền trái mang màu tín hiệu ── */
+.tile {
+  min-width: 0;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--baseline);
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+.tile.sig-good { border-left-color: var(--delta-good); }
+.tile.sig-bad  { border-left-color: var(--delta-bad); }
+.tile .label { font-size: 12px; color: var(--ink-2); }
+.label-row { display: flex; align-items: center; gap: 5px; }
+button.info {
+  background: none; border: 1px solid var(--border); border-radius: 50%;
+  width: 15px; height: 15px; padding: 0; line-height: 1;
+  font-size: 10px; color: var(--ink-muted); cursor: pointer; flex: none;
+}
+button.info:hover { color: var(--ink-1); border-color: var(--ink-muted); }
+.reading { font-size: 12px; color: var(--ink-2); margin-top: 3px; line-height: 1.45; }
+#pop {
+  position: fixed; z-index: 20; display: none; max-width: 300px;
+  background: var(--surface-1); border: 1px solid var(--border);
+  border-radius: 8px; padding: 10px 12px; font-size: 12px; line-height: 1.5;
+  color: var(--ink-2); box-shadow: 0 4px 16px rgba(0,0,0,.2);
+}
+#pop b { color: var(--ink-1); font-weight: 600; }
+#pop .sec { margin-top: 6px; }
+.tile .row { display: flex; align-items: center; gap: 10px; }
+.tile .value { font-size: 20px; font-weight: 600; white-space: nowrap; }
+.tile svg.spark { flex: 1; min-width: 60px; height: 36px; display: block; }
+.tile .sub { display: flex; gap: 8px; align-items: center; font-size: 12px; min-height: 18px; }
+.delta { font-size: 12px; color: var(--ink-2); white-space: nowrap; }
+.delta.good { color: var(--delta-good); }
+.delta.bad { color: var(--delta-bad); }
+.chip {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: 11px; border-radius: 999px; padding: 1px 8px;
+  border: 1px solid var(--border); color: var(--ink-2);
+}
+.chip .dot { width: 7px; height: 7px; border-radius: 50%; display: inline-block; }
+.stale { color: var(--ink-muted); font-size: 11px; }
+.empty { color: var(--ink-muted); }
+
+/* ── brief ── */
+.brief p { color: var(--ink-2); margin: 0 0 6px; font-size: 13px; }
+.brief li { color: var(--ink-2); font-size: 13px; margin: 2px 0; }
+.brief ul { margin: 0 0 6px; padding-left: 18px; }
+.brief b { color: var(--ink-1); }
+.regime-chip {
+  display: inline-flex; align-items: center; gap: 5px; margin-bottom: 8px;
+  font-size: 12px; font-weight: 600; border-radius: 999px; padding: 2px 10px;
+  border: 1px solid var(--border); color: var(--ink-1);
+}
+.alert-line {
+  display: flex; gap: 6px; font-size: 12px; color: var(--ink-2);
+  border-left: 3px solid var(--status-warning); padding: 2px 8px; margin-bottom: 6px;
+  background: var(--surface-2); border-radius: 4px;
+}
+#briefBody { max-height: 240px; overflow-y: auto; padding-right: 4px; }
+
+/* ── table view ── */
+#tableView { display: none; }
+#tableView.show { display: block; }
+table { border-collapse: collapse; width: 100%; font-size: 13px; }
+th, td { text-align: left; padding: 6px 10px; border-bottom: 1px solid var(--grid); }
+td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+th { color: var(--ink-muted); font-weight: 500; }
+
+/* ── tooltip ── */
+#tip {
+  position: fixed; pointer-events: none; z-index: 10; display: none;
+  background: var(--surface-1); border: 1px solid var(--border);
+  border-radius: 6px; padding: 4px 8px; font-size: 12px; color: var(--ink-1);
+  box-shadow: 0 2px 8px rgba(0,0,0,.15);
+}
+#tip .d { color: var(--ink-muted); }
+
+footer { margin-top: 20px; color: var(--ink-muted); font-size: 12px; }
+
+@media (max-width: 860px) {
+  .hero-strip, .blocks { grid-template-columns: 1fr; }
+}
+@media (max-width: 520px) {
+  .tiles { grid-template-columns: 1fr; }
+  .hero-value { font-size: 40px; }
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <h1>Market Monitor</h1>
+    <span class="meta" id="updatedAt"></span>
+    <span class="spacer"></span>
+    <button class="ghost" id="toggleTable">Bảng dữ liệu</button>
+    <button class="ghost" id="toggleTheme">Sáng/Tối</button>
+  </header>
+
+  <!-- ① header strip -->
+  <div class="hero-strip">
+    <div class="card" id="heroBtc"></div>
+    <div class="card" id="heroFng"></div>
+    <div class="card brief" id="briefCard">
+      <h2 style="font-size:12px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--ink-muted);margin:0 0 8px">Regime · AI brief <span id="briefDate" style="text-transform:none;font-weight:400"></span></h2>
+      <div id="briefAlerts"></div>
+      <div id="briefBody"><p>Chưa có brief — chạy <code>python daily_brief.py</code>.</p></div>
+    </div>
+  </div>
+
+  <!-- ②③④ blocks -->
+  <div class="blocks">
+    <div class="card block"><h2>Vĩ mô</h2><div class="tiles" id="grp-macro"></div></div>
+    <div class="card block"><h2>Cấu trúc thị trường</h2><div class="tiles" id="grp-market"></div></div>
+    <div class="card block" style="grid-column: 1 / -1"><h2>Phái sinh &amp; dòng tiền</h2><div class="tiles" id="grp-flows" style="grid-template-columns:repeat(auto-fill,minmax(240px,1fr))"></div></div>
+  </div>
+
+  <!-- table view (accessibility) -->
+  <div class="card" id="tableView" style="margin-top:12px">
+    <h2 style="font-size:12px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--ink-muted);margin:0 0 8px">Toàn bộ chỉ số</h2>
+    <table id="dataTable"></table>
+  </div>
+
+  <footer>Nguồn: FRED · CoinGecko · Alternative.me · Binance · Farside · CoinMetrics — cập nhật qua <code>collect.py</code>. Tự refresh mỗi 5 phút.</footer>
+</div>
+<div id="tip"></div>
+<div id="pop"></div>
+
+<script>
+"use strict";
+
+/* ───────── formatting ───────── */
+const fmt = {
+  usd: v => "$" + compact(v),
+  usd_big: v => "$" + compact(v),
+  busd: v => "$" + compact(v * 1e9),          // FRED M2: tỷ USD
+  musd: v => (v >= 0 ? "+" : "−") + "$" + compact(Math.abs(v) * 1e6),
+  pct: v => v.toFixed(2) + "%",
+  pct8h: v => v.toFixed(4) + "%",
+  index: v => v.toFixed(v >= 100 ? 1 : 0),
+  ratio: v => v.toFixed(2),
+};
+function compact(v) {
+  const a = Math.abs(v);
+  if (a >= 1e12) return (v / 1e12).toFixed(2) + "T";
+  if (a >= 1e9)  return (v / 1e9).toFixed(2) + "B";
+  if (a >= 1e6)  return (v / 1e6).toFixed(1) + "M";
+  if (a >= 1e3)  return (v / 1e3).toFixed(1) + "K";
+  return v.toFixed(0);
+}
+function fmtDelta(metric, unit, d) {
+  if (d == null) return null;
+  const arrow = d >= 0 ? "▲" : "▼";
+  const a = Math.abs(d);
+  let body;
+  if (unit === "pct") body = a.toFixed(2) + " pp";        // điểm phần trăm
+  else if (unit === "pct8h") body = a.toFixed(4) + " pp";
+  else if (unit === "index") body = (a >= 10 ? a.toFixed(0) : a.toFixed(1)) + " đ";
+  else if (unit === "ratio") body = a.toFixed(2);
+  else body = compact(a);
+  return arrow + " " + body;
+}
+
+/* up = tốt (true), xấu (false) hay trung tính (null) — quyết định màu delta */
+const UP_GOOD = {
+  price_btc: true, price_eth: true, total_mcap: true, m2: true, etf_flow_btc: true,
+  etf_flow_eth: true, net_liquidity: true, stablecoin_mcap: true,
+  dxy: false, us10y: false, fed_funds: false, cpi_yoy: false, usdt_dominance: false,
+  btc_dominance: null, fear_greed: null, funding_btc: null, funding_eth: null,
+  oi_btc_usd: null, mvrv_btc: null,
+};
+
+/* nguồn theo giờ coi là cũ sau 3h; nguồn theo ngày sau 3 ngày */
+const HOURLY = new Set(["price_btc","price_eth","btc_dominance","usdt_dominance","total_mcap","stablecoin_mcap","funding_btc","funding_eth","oi_btc_usd"]);
+
+/* ───────── status rules (rule cứng, không phải AI) ───────── */
+function statusChip(metric, value) {
+  if (value == null) return null;
+  if (metric.startsWith("funding_")) {
+    if (value >= 0.1)  return { color: "var(--status-critical)", text: "Quá nóng ⚠" };
+    if (value >= 0.05) return { color: "var(--status-serious)",  text: "Nóng ⚠" };
+    if (value < 0)     return { color: "var(--status-warning)",  text: "Âm" };
+    return null;
+  }
+  if (metric === "fear_greed") {
+    if (value >= 75) return { color: "var(--status-serious)", text: "Extreme greed ⚠" };
+    if (value >= 55) return { color: "var(--ink-muted)",      text: "Greed" };
+    if (value <= 25) return { color: "var(--status-good)",    text: "Extreme fear ◆" };
+    if (value <= 45) return { color: "var(--ink-muted)",      text: "Fear" };
+    return { color: "var(--ink-muted)", text: "Neutral" };
+  }
+  return null;
+}
+
+/* ───────── sparkline ───────── */
+const SW = 140, SH = 36, PAD = 3;
+function sparkline(series, unit, sig) {
+  if (!series || series.length < 2) return null;
+  const vs = series.map(p => p.v);
+  let min = Math.min(...vs), max = Math.max(...vs);
+  if (min === max) { min -= 1; max += 1; }
+  const x = i => PAD + (i / (series.length - 1)) * (SW - 2 * PAD);
+  const y = v => SH - PAD - ((v - min) / (max - min)) * (SH - 2 * PAD);
+  const pts = series.map((p, i) => x(i).toFixed(1) + "," + y(p.v).toFixed(1)).join(" ");
+  const last = series[series.length - 1];
+  // đường mang màu tín hiệu (mờ), điểm cuối màu đậm; trung tính giữ xanh dương
+  const lineCol = sig === "good" ? "var(--delta-good)" : sig === "bad" ? "var(--delta-bad)" : "var(--series-dim)";
+  const dotCol = sig ? lineCol : "var(--series-1)";
+  const lineOp = sig ? "0.55" : "1";
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("viewBox", `0 0 ${SW} ${SH}`);
+  svg.classList.add("spark");
+  svg.innerHTML =
+    `<polyline points="${pts}" fill="none" stroke="${lineCol}" stroke-opacity="${lineOp}" stroke-width="2" vector-effect="non-scaling-stroke" stroke-linejoin="round"/>` +
+    `<circle cx="${x(series.length - 1)}" cy="${y(last.v)}" r="3" fill="${dotCol}"/>` +
+    `<line class="cross" x1="0" x2="0" y1="${PAD}" y2="${SH - PAD}" stroke="var(--baseline)" stroke-width="1" vector-effect="non-scaling-stroke" visibility="hidden"/>` +
+    `<circle class="hoverdot" r="3.5" fill="var(--series-1)" visibility="hidden"/>`;
+  attachHover(svg, series, unit, x, y);
+  return svg;
+}
+
+const tip = document.getElementById("tip");
+function attachHover(svg, series, unit, x, y) {
+  const cross = () => svg.querySelector(".cross");
+  const hdot = () => svg.querySelector(".hoverdot");
+  svg.addEventListener("pointermove", e => {
+    const r = svg.getBoundingClientRect();
+    const fx = (e.clientX - r.left) / r.width * SW;
+    const i = Math.max(0, Math.min(series.length - 1,
+      Math.round((fx - PAD) / (SW - 2 * PAD) * (series.length - 1))));
+    const p = series[i];
+    cross().setAttribute("x1", x(i)); cross().setAttribute("x2", x(i));
+    cross().setAttribute("visibility", "visible");
+    hdot().setAttribute("cx", x(i)); hdot().setAttribute("cy", y(p.v));
+    hdot().setAttribute("visibility", "visible");
+    tip.innerHTML = `<span class="d">${p.d}</span> · ${(fmt[unit] || (v => v))(p.v)}`;
+    tip.style.display = "block";
+    tip.style.left = Math.min(e.clientX + 12, window.innerWidth - 130) + "px";
+    tip.style.top = (e.clientY - 34) + "px";
+  });
+  svg.addEventListener("pointerleave", () => {
+    tip.style.display = "none";
+    cross().setAttribute("visibility", "hidden");
+    hdot().setAttribute("visibility", "hidden");
+  });
+}
+
+/* ───────── lớp ngữ cảnh: chỉ số này nghĩa là gì ───────── */
+/* Giải thích tĩnh cho nút ⓘ: là gì / vì sao quan trọng / cách đọc */
+const INFO = {
+  price_btc: { what: "Giá Bitcoin (USD).", why: "Neo tham chiếu của toàn thị trường — mọi chỉ số khác đọc trong tương quan với nó.", read: "So với vùng 90 ngày để biết đang ở đỉnh, đáy hay giữa range." },
+  fear_greed: { what: "Chỉ số tâm lý đám đông 0–100 (Alternative.me), tổng hợp từ biến động, volume, mạng xã hội, dominance.", why: "Tâm lý cực đoan hay đảo chiều: đám đông tham lam nhất ở đỉnh, sợ hãi nhất ở đáy.", read: "≤25 sợ hãi cực độ (vùng cơ hội theo contrarian) · ≥75 tham lam cực độ (vùng thận trọng)." },
+  dxy: { what: "Chỉ số sức mạnh USD so với rổ tiền tệ lớn (FRED, broad index).", why: "USD mạnh hút tiền khỏi tài sản rủi ro — lịch sử crypto tăng mạnh thường trùng giai đoạn USD yếu đi.", read: "Hướng đi 30 ngày quan trọng hơn con số tuyệt đối: USD đang mạnh lên là lực cản, yếu đi là thuận gió." },
+  us10y: { what: "Lợi suất trái phiếu chính phủ Mỹ kỳ hạn 10 năm.", why: "Là \"giá của tiền\" dài hạn: lợi suất cao khiến tài sản không sinh lãi như crypto kém hấp dẫn.", read: "Trên ~4.5% là môi trường ngặt cho tài sản rủi ro; xu hướng giảm là tín hiệu nới." },
+  fed_funds: { what: "Lãi suất điều hành của Fed.", why: "Quyết định chi phí vốn toàn cầu — chu kỳ nới lỏng của Fed lịch sử trùng các sóng tăng lớn của crypto.", read: "Đọc kèm CPI: lãi suất thực (Fed funds − CPI) dương cao = thắt chặt, âm = kích thích." },
+  m2: { what: "Cung tiền M2 của Mỹ (tiền mặt + tiền gửi).", why: "Thước đo thanh khoản: tiền in ra nhiều thì một phần chảy vào tài sản rủi ro. BTC nhạy với M2 toàn cầu.", read: "Hướng đi quan trọng hơn mức: M2 mở rộng là thuận gió trung hạn, thu hẹp là nghịch gió." },
+  cpi_yoy: { what: "Lạm phát Mỹ so với cùng kỳ năm trước.", why: "Quyết định dư địa hành động của Fed — lạm phát chưa về mục tiêu 2% thì khó nới lỏng mạnh.", read: "Càng gần 2% Fed càng dễ hạ lãi suất → thuận lợi cho tài sản rủi ro." },
+  btc_dominance: { what: "Tỷ trọng vốn hóa BTC trên toàn thị trường crypto.", why: "Cho biết tiền đang co cụm về BTC (phòng thủ) hay lan ra altcoin (khẩu vị rủi ro cao).", read: "Dominance giảm trong khi tổng vốn hóa tăng là dấu hiệu kinh điển của altseason." },
+  usdt_dominance: { what: "Tỷ trọng vốn hóa USDT trên toàn thị trường.", why: "Stablecoin là \"tiền đứng ngoài chờ\": tỷ trọng tăng nghĩa là tiền rút về trú ẩn.", read: "Tăng = risk-off (bán tài sản giữ stablecoin) · Giảm = risk-on (tiền vào lại thị trường)." },
+  total_mcap: { what: "Tổng vốn hóa toàn thị trường crypto.", why: "Thước đo dòng tiền vào/ra toàn ngành, ít nhiễu hơn giá một đồng riêng lẻ.", read: "So khoảng cách với đỉnh 90 ngày để định vị pha hiện tại." },
+  funding_btc: { what: "Phí funding hợp đồng vĩnh cửu BTC trên Binance (%/8h): dương = long trả short, âm = short trả long.", why: "Đo độ nóng của đòn bẩy — funding cao kéo dài hay kết thúc bằng long squeeze (giá sập nhanh).", read: "0–0.01% lành mạnh · ≥0.05% nóng · ≥0.1% quá nóng · âm = thị trường thận trọng, dễ short squeeze." },
+  funding_eth: { what: "Phí funding hợp đồng vĩnh cửu ETH (%/8h).", why: "Như funding BTC, nhưng phản ánh khẩu vị đòn bẩy ở nhánh altcoin.", read: "Cùng thang đọc với funding BTC; lệch xa funding BTC là tín hiệu dòng tiền lệch nhánh." },
+  oi_btc_usd: { what: "Tổng giá trị vị thế futures BTC đang mở trên Binance.", why: "Đòn bẩy tích tụ càng nhiều, biến động khi đảo chiều càng dữ dội (cascade thanh lý).", read: "So với range 30 ngày: vùng cao + funding nóng = rủi ro thanh lý dây chuyền tăng." },
+  etf_flow_btc: { what: "Dòng tiền ròng ngày vào các ETF Bitcoin spot Mỹ (triệu USD, Farside).", why: "Đại diện cho dòng tiền tổ chức — nguồn cầu lớn và \"chậm\" nhất của chu kỳ này.", read: "Chuỗi ngày mua ròng/bán ròng liên tiếp có ý nghĩa hơn một ngày đơn lẻ — xem tổng 7 ngày." },
+  price_eth: { what: "Giá Ethereum (USD).", why: "Đầu tàu của nhánh altcoin; tỷ giá ETH/BTC phản ánh khẩu vị rủi ro nội bộ crypto.", read: "So với vùng 90 ngày như BTC." },
+  mvrv_btc: { what: "MVRV = vốn hóa thị trường / vốn hóa thực hiện (giá vốn trung bình on-chain của toàn bộ holder). Nguồn CoinMetrics.", why: "Chỉ số định giá chu kỳ tin cậy nhất của BTC: cho biết holder trung bình đang lãi hay lỗ bao nhiêu.", read: "Lịch sử: <1 = vùng đáy chu kỳ (holder trung bình lỗ) · 1–2 = trung tính · >3 = vùng đỉnh, rủi ro chốt lời cao." },
+  stablecoin_mcap: { what: "Tổng cung USDT + USDC (~90% thị trường stablecoin).", why: "Cung stablecoin tăng nghĩa là tiền pháp định MỚI thật sự vào ngành — tín hiệu sạch hơn dominance vì không phụ thuộc giá.", read: "Mở rộng = sức mua dự trữ tăng, nền tăng giá bền · Đi ngang/thu hẹp = không có tiền mới." },
+  net_liquidity: { what: "Thanh khoản ròng của Fed = tổng tài sản − reverse repo − tài khoản Kho bạc (tỷ USD, FRED).", why: "Là lượng USD thực sự lưu thông trong hệ thống tài chính — bám sát BTC hơn M2 thô trong các chu kỳ gần đây.", read: "Hướng đi là chính: mở rộng = thuận gió cho tài sản rủi ro, thu hẹp = nghịch gió." },
+  etf_flow_eth: { what: "Dòng tiền ròng ngày vào các ETF Ethereum spot Mỹ (triệu USD, Farside).", why: "Dòng tổ chức vào nhánh altcoin — so với ETF BTC để biết tổ chức đang ưu tiên nhánh nào.", read: "Xem tổng 7 phiên; cùng chiều với ETF BTC = dòng tổ chức rộng, ngược chiều = xoay trục." },
+};
+
+/* Vị trí giá trị hiện tại trong chuỗi (0–100, % số ngày có giá trị thấp hơn) */
+function pctl(series, v) {
+  if (!series || series.length < 10) return null;
+  const below = series.filter(p => p.v <= v).length;
+  return Math.round(below / series.length * 100);
+}
+function rangePos(series, v) {
+  const p = pctl(series, v);
+  if (p == null) return null;
+  return p >= 80 ? "vùng cao" : p <= 20 ? "vùng thấp" : "vùng giữa";
+}
+function offHigh(series, v) {
+  if (!series || series.length < 10) return null;
+  const hi = Math.max(...series.map(p => p.v));
+  return (v / hi - 1) * 100; // % cách đỉnh của cửa sổ
+}
+
+/* Một câu diễn giải theo rule cho từng chỉ số — KHÔNG dự đoán, chỉ định vị */
+function reading(metric, m, all) {
+  const v = m.value, s = m.series, d7 = m.deltas?.d7, d30 = m.deltas?.d30;
+  if (v == null) return null;
+  switch (metric) {
+    case "price_btc": case "price_eth": {
+      // Ưu tiên MA200 (xu thế dài hạn); chưa đủ lịch sử thì rơi về range 90d
+      if (m.ma != null) {
+        const gap = (v / m.ma - 1) * 100;
+        const side = gap >= 0 ? "Trên" : "Dưới";
+        const trend = gap >= 3 ? "xu hướng dài hạn tăng" : gap <= -3 ? "xu hướng dài hạn giảm" : "sát đường phân định xu hướng";
+        return `${side} MA${m.ma_window} ${gap >= 0 ? "+" : ""}${gap.toFixed(1)}% — ${trend}.`;
+      }
+      const pos = rangePos(s, v), oh = offHigh(s, v);
+      if (pos == null) return null;
+      return `Đang ở ${pos} của 90 ngày qua${oh != null && oh < -1 ? `, cách đỉnh 90d ${oh.toFixed(1)}%` : " — sát đỉnh 90 ngày"}.`;
+    }
+    case "total_mcap": {
+      const pos = rangePos(s, v), oh = offHigh(s, v);
+      if (pos == null) return null;
+      return `Đang ở ${pos} của 90 ngày qua${oh != null && oh < -1 ? `, cách đỉnh 90d ${oh.toFixed(1)}%` : " — sát đỉnh 90 ngày"}.`;
+    }
+    case "mvrv_btc":
+      if (v >= 3) return "Vùng đỉnh chu kỳ lịch sử — holder trung bình lãi đậm, áp lực chốt lời lớn.";
+      if (v >= 2) return "Định giá ấm — lãi trên giấy đáng kể, chưa tới vùng cực đoan lịch sử (>3).";
+      if (v >= 1) return "Vùng trung tính của chu kỳ — holder trung bình đang có lãi vừa phải.";
+      return "Holder trung bình đang lỗ — lịch sử các vùng MVRV<1 gần đáy chu kỳ hơn đỉnh.";
+    case "stablecoin_mcap": {
+      const tr = d30 != null ? d30 / (v - d30) * 100 : null;
+      if (tr == null) return "Cung stablecoin mở rộng = tiền mới vào ngành.";
+      if (tr >= 1) return `Mở rộng ${tr.toFixed(1)}%/30d — tiền pháp định mới đang vào ngành.`;
+      if (tr <= -1) return `Thu hẹp ${tr.toFixed(1)}%/30d — tiền đang rời khỏi ngành.`;
+      return "Đi ngang 30 ngày — không có dòng tiền mới đáng kể vào ngành.";
+    }
+    case "net_liquidity": {
+      const tr = d30 != null ? d30 : (s && s.length >= 2 ? s[s.length - 1].v - s[0].v : null);
+      if (tr == null) return "Hướng đi của thanh khoản ròng quan trọng hơn mức tuyệt đối.";
+      const dir = tr > 0 ? "mở rộng" : "thu hẹp";
+      const im = tr > 0 ? "thuận gió" : "nghịch gió";
+      return `Thanh khoản ròng của Fed đang ${dir} (${tr >= 0 ? "+" : "−"}$${compact(Math.abs(tr) * 1e9)}/30d) — ${im} cho tài sản rủi ro.`;
+    }
+    case "fear_greed":
+      if (v >= 75) return "Đám đông hưng phấn cực độ — lịch sử hay là vùng thận trọng, không phải điểm mua đuổi.";
+      if (v >= 55) return "Tham lam — thị trường lạc quan, chú ý độ nóng của đòn bẩy.";
+      if (v <= 25) return "Sợ hãi cực độ — theo contrarian, các vùng này thường gần đáy hơn đỉnh.";
+      if (v <= 45) return "Sợ hãi — tâm lý yếu, thị trường dễ phản ứng thái quá với tin xấu.";
+      return "Trung tính — tâm lý không nghiêng hẳn về bên nào.";
+    case "dxy": {
+      if (d30 == null) return "USD so với rổ tiền tệ lớn — hướng đi 30 ngày quan trọng hơn mức tuyệt đối.";
+      const dir = d30 > 0.5 ? "mạnh lên" : d30 < -0.5 ? "yếu đi" : "đi ngang";
+      const im = d30 > 0.5 ? "lực cản cho crypto" : d30 < -0.5 ? "thuận gió cho crypto" : "trung tính với crypto";
+      return `USD ${dir} trong 30 ngày (${d30 > 0 ? "+" : ""}${d30.toFixed(1)} đ) — ${im}.`;
+    }
+    case "us10y": {
+      const lvl = v >= 4.5 ? "cao — môi trường ngặt cho tài sản rủi ro" : v >= 3.5 ? "trung bình" : "thấp — thuận lợi cho tài sản rủi ro";
+      const tr = d30 == null ? "" : d30 <= -0.15 ? " Đang hạ nhiệt — tín hiệu nới." : d30 >= 0.15 ? " Đang tăng — áp lực thêm." : "";
+      return `Lợi suất ở mức ${lvl}.${tr}`;
+    }
+    case "fed_funds": {
+      const cpi = all?.cpi_yoy?.value;
+      if (cpi == null) return "Đọc kèm CPI để biết lãi suất thực (thắt chặt hay kích thích).";
+      const real = v - cpi;
+      const st = real >= 1 ? "thắt chặt" : real >= 0 ? "thắt chặt nhẹ" : "kích thích";
+      return `Lãi suất thực ${real >= 0 ? "+" : ""}${real.toFixed(2)} pp (so CPI) — chính sách đang ${st}.`;
+    }
+    case "m2": {
+      // dữ liệu tháng: delta 30d hay trượt cửa sổ, lấy xu hướng từ chính chuỗi
+      const tr = d30 != null ? d30 : (s && s.length >= 2 ? s[s.length - 1].v - s[0].v : null);
+      if (tr == null) return "Hướng đi của M2 quan trọng hơn mức: mở rộng = thuận gió trung hạn.";
+      const dir = tr > 0 ? "mở rộng" : "thu hẹp";
+      const im = tr > 0 ? "thuận gió trung hạn cho tài sản rủi ro" : "nghịch gió cho tài sản rủi ro";
+      return `Thanh khoản USD đang ${dir} — ${im}.`;
+    }
+    case "cpi_yoy": {
+      const gap = v - 2;
+      if (gap <= 0.3) return "Sát mục tiêu 2% của Fed — dư địa nới lỏng đang mở.";
+      return `Còn ${gap.toFixed(1)} pp trên mục tiêu 2% của Fed — dư địa nới lỏng hạn chế.`;
+    }
+    case "btc_dominance": {
+      const base = v >= 55 ? "Tiền đang co cụm về BTC — khẩu vị rủi ro với altcoin thấp." : v >= 45 ? "Cân bằng giữa BTC và altcoin." : "Tiền lan rộng sang altcoin — khẩu vị rủi ro cao.";
+      const tr = d7 != null && d7 <= -1 ? " Dominance đang giảm nhanh — dấu hiệu tiền chảy sang alt." : "";
+      return base + tr;
+    }
+    case "usdt_dominance": {
+      if (d7 == null) return "Tỷ trọng stablecoin tăng = tiền trú ẩn (risk-off); giảm = tiền vào lại thị trường.";
+      if (d7 >= 0.15) return "Đang tăng — tiền rút về stablecoin trú ẩn, thị trường risk-off.";
+      if (d7 <= -0.15) return "Đang giảm — tiền rời stablecoin vào tài sản, thị trường risk-on.";
+      return "Đi ngang — chưa có dịch chuyển trú ẩn/giải ngân đáng kể.";
+    }
+    case "funding_btc": case "funding_eth":
+      if (v >= 0.1) return "Long đòn bẩy quá nóng — rủi ro long squeeze cao, vùng dễ điều chỉnh mạnh.";
+      if (v >= 0.05) return "Đòn bẩy nghiêng long rõ rệt — độ nóng cần theo dõi.";
+      if (v < 0) return "Phe short đang trả phí — tâm lý thận trọng, nền cho short squeeze nếu có tin tốt.";
+      return "Vùng lành mạnh — đòn bẩy không nghiêng hẳn về bên nào.";
+    case "oi_btc_usd": {
+      const pos = rangePos(s, v), p = pctl(s, v);
+      if (pos == null) return "Đòn bẩy tích tụ càng cao, biến động khi đảo chiều càng mạnh.";
+      const warn = p >= 80 ? " — nhiều nhiên liệu cho biến động mạnh" : "";
+      return `Đòn bẩy trong hệ thống ở ${pos} của 30 ngày (cao hơn ${p}% số ngày)${warn}.`;
+    }
+    case "etf_flow_btc": case "etf_flow_eth": {
+      if (!s || s.length === 0) return null;
+      const last7 = s.slice(-7).reduce((t, p) => t + p.v, 0);
+      const dir = last7 > 0 ? "mua ròng" : "bán ròng";
+      return `Tổng 7 phiên gần nhất: ${last7 >= 0 ? "+" : "−"}$${compact(Math.abs(last7) * 1e6)} — tổ chức đang ${dir}.`;
+    }
+  }
+  return null;
+}
+
+/* Tín hiệu tổng của tile: 'good' | 'bad' | null (trung tính).
+   PHẢI trùng kết luận của reading() — màu không bao giờ nói khác chữ.
+   Mapping chuẩn: docs/rules.md §7. */
+function signalFor(metric, m, all) {
+  const v = m.value, s = m.series, d7 = m.deltas?.d7, d30 = m.deltas?.d30;
+  if (v == null) return null;
+  switch (metric) {
+    case "price_btc": case "price_eth": {
+      if (m.ma == null) return null;
+      const gap = (v / m.ma - 1) * 100;
+      return gap >= 3 ? "good" : gap <= -3 ? "bad" : null;
+    }
+    case "total_mcap":
+      return d7 == null ? null : d7 > 0 ? "good" : d7 < 0 ? "bad" : null;
+    case "fear_greed": return v >= 75 ? "bad" : v <= 25 ? "good" : null;
+    case "dxy": return d30 == null ? null : d30 > 0.5 ? "bad" : d30 < -0.5 ? "good" : null;
+    case "us10y": return d30 == null ? null : d30 >= 0.15 ? "bad" : d30 <= -0.15 ? "good" : null;
+    case "fed_funds": {
+      const cpi = all?.cpi_yoy?.value;
+      if (cpi == null) return null;
+      const real = v - cpi;
+      return real >= 1 ? "bad" : real < 0 ? "good" : null;
+    }
+    case "m2": case "net_liquidity": {
+      const tr = d30 != null ? d30 : (s && s.length >= 2 ? s[s.length - 1].v - s[0].v : null);
+      return tr == null ? null : tr > 0 ? "good" : "bad";
+    }
+    case "cpi_yoy":
+      return v - 2 <= 0.3 ? "good" : (d30 != null && d30 >= 0.1 ? "bad" : null);
+    case "usdt_dominance":
+      return d7 == null ? null : d7 >= 0.15 ? "bad" : d7 <= -0.15 ? "good" : null;
+    case "stablecoin_mcap": {
+      const tr = d30 != null ? d30 / (v - d30) * 100 : null;
+      return tr == null ? null : tr >= 1 ? "good" : tr <= -1 ? "bad" : null;
+    }
+    case "mvrv_btc": return v >= 3 ? "bad" : v < 1 ? "good" : null;
+    case "funding_btc": case "funding_eth": return v >= 0.05 ? "bad" : null;
+    case "oi_btc_usd": {
+      const p = pctl(s, v);
+      return p != null && p >= 80 ? "bad" : null;
+    }
+    case "etf_flow_btc": case "etf_flow_eth": {
+      if (!s || !s.length) return null;
+      const t = s.slice(-7).reduce((a, p) => a + p.v, 0);
+      return t > 0 ? "good" : t < 0 ? "bad" : null;
+    }
+  }
+  return null; // btc_dominance: luôn trung tính
+}
+
+/* delta hiển thị tròn về 0 thì để trung tính, không tô màu */
+function deltaClass(metric, raw, formatted) {
+  const ug = UP_GOOD[metric];
+  if (formatted == null || ug == null) return "";
+  if (/^[▲▼] 0(\.0+)?( |$)/.test(formatted)) return "";
+  return (raw >= 0) === ug ? "good" : "bad";
+}
+
+/* ───────── tiles ───────── */
+/* ngưỡng "cũ" theo nhịp công bố thật của từng nguồn (giờ) */
+const STALE_LIMIT = {
+  etf_flow_btc: 120, etf_flow_eth: 120,  // chỉ có ngày giao dịch, nghỉ cuối tuần
+  dxy: 14 * 24,        // FRED công bố trễ ~1 tuần
+  us10y: 6 * 24, fed_funds: 6 * 24,
+  m2: 70 * 24, cpi_yoy: 70 * 24,  // số liệu tháng, công bố trễ ~6 tuần
+  net_liquidity: 12 * 24,  // series tuần (WALCL)
+  mvrv_btc: 4 * 24,        // CoinMetrics công bố trễ 1–2 ngày
+};
+function staleNote(metric, ts) {
+  if (!ts) return null;
+  const ageH = (Date.now() - Date.parse(ts)) / 36e5;
+  const limit = STALE_LIMIT[metric] ?? (HOURLY.has(metric) ? 3 : 72);
+  if (ageH <= limit) return null;
+  return "⏱ dữ liệu cũ " + (ageH < 48 ? Math.round(ageH) + "h" : Math.round(ageH / 24) + " ngày");
+}
+
+function labelRow(metric, label) {
+  const info = INFO[metric];
+  return `<div class="label-row"><span class="label">${label}</span>${info ? `<button class="info" data-info="${metric}" aria-label="Giải thích chỉ số">i</button>` : ""}</div>`;
+}
+
+function tile(metric, m, all) {
+  const el = document.createElement("div");
+  const sig = signalFor(metric, m, all);
+  el.className = "tile" + (sig ? " sig-" + sig : "");
+  const f = fmt[m.unit] || (v => String(v));
+  if (m.value == null) {
+    el.innerHTML = `${labelRow(metric, m.label)}<div class="value empty">—</div><div class="sub"><span class="empty">chưa có dữ liệu</span></div>`;
+    return el;
+  }
+  // etf_flow là đại lượng dòng chảy — delta ngày-so-ngày chỉ gây nhiễu,
+  // tổng 7 phiên trong dòng diễn giải mới là thông tin đúng
+  const d7 = metric.startsWith("etf_flow") ? null : fmtDelta(metric, m.unit, m.deltas.d7);
+  const cls = deltaClass(metric, m.deltas.d7, d7);
+  const st = statusChip(metric, m.value);
+  const stale = staleNote(metric, m.ts);
+  const rd = reading(metric, m, all);
+
+  el.innerHTML = `${labelRow(metric, m.label)}
+    <div class="row"><div class="value">${f(m.value)}</div></div>
+    <div class="sub">
+      ${d7 ? `<span class="delta ${cls}" title="so với 7 ngày trước">${d7} /7d</span>` : ""}
+      ${st ? `<span class="chip"><span class="dot" style="background:${st.color}"></span>${st.text}</span>` : ""}
+      ${stale ? `<span class="stale">${stale}</span>` : ""}
+    </div>
+    ${rd ? `<div class="reading">${rd}</div>` : ""}`;
+  const spark = sparkline(m.series, m.unit, sig);
+  if (spark) el.querySelector(".row").appendChild(spark);
+  return el;
+}
+
+function hero(container, metric, m, deltaKey, deltaLabel, all) {
+  const f = fmt[m.unit] || (v => String(v));
+  if (m.value == null) {
+    container.innerHTML = `${labelRow(metric, m.label)}<div class="hero-value empty">—</div>`;
+    return;
+  }
+  const sig = signalFor(metric, m, all);
+  const d = fmtDelta(metric, m.unit, m.deltas[deltaKey]);
+  const cls = deltaClass(metric, m.deltas[deltaKey], d);
+  const st = statusChip(metric, m.value);
+  const stale = staleNote(metric, m.ts);
+  const rd = reading(metric, m, all);
+  container.innerHTML = `${labelRow(metric, m.label)}
+    <div class="hero-value">${f(m.value)}</div>
+    <div class="hero-sub">
+      ${d ? `<span class="delta ${cls}">${d} /${deltaLabel}</span>` : ""}
+      ${st ? `<span class="chip"><span class="dot" style="background:${st.color}"></span>${st.text}</span>` : ""}
+      ${stale ? `<span class="stale">${stale}</span>` : ""}
+    </div>
+    ${rd ? `<div class="reading">${rd}</div>` : ""}`;
+  const spark = sparkline(m.series, m.unit, sig);
+  if (spark) { spark.style.height = "44px"; spark.style.marginTop = "8px"; container.appendChild(spark); }
+}
+
+/* ───────── popover ⓘ ───────── */
+const pop = document.getElementById("pop");
+document.addEventListener("click", e => {
+  const btn = e.target.closest("button.info");
+  if (!btn) { pop.style.display = "none"; return; }
+  const info = INFO[btn.dataset.info];
+  if (!info) return;
+  pop.innerHTML = `<div><b>Là gì:</b> ${info.what}</div>
+    <div class="sec"><b>Vì sao quan trọng:</b> ${info.why}</div>
+    <div class="sec"><b>Cách đọc:</b> ${info.read}</div>`;
+  pop.style.display = "block";
+  const r = btn.getBoundingClientRect();
+  const w = Math.min(300, window.innerWidth - 24);
+  pop.style.left = Math.max(12, Math.min(r.left, window.innerWidth - w - 12)) + "px";
+  pop.style.top = (r.bottom + 6 + pop.offsetHeight > window.innerHeight
+    ? r.top - pop.offsetHeight - 6 : r.bottom + 6) + "px";
+});
+
+/* ───────── table view ───────── */
+function renderTable(metrics) {
+  const rows = Object.entries(metrics).map(([k, m]) => {
+    const f = fmt[m.unit] || (v => String(v));
+    return `<tr><td>${m.label}</td>
+      <td class="num">${m.value == null ? "—" : f(m.value)}</td>
+      <td class="num">${fmtDelta(k, m.unit, m.deltas?.d1) ?? "—"}</td>
+      <td class="num">${fmtDelta(k, m.unit, m.deltas?.d7) ?? "—"}</td>
+      <td class="num">${fmtDelta(k, m.unit, m.deltas?.d30) ?? "—"}</td>
+      <td>${m.ts ? m.ts.slice(0, 16).replace("T", " ") + " UTC" : "—"}</td></tr>`;
+  }).join("");
+  document.getElementById("dataTable").innerHTML =
+    `<tr><th>Chỉ số</th><th class="num">Giá trị</th><th class="num">Δ1d</th><th class="num">Δ7d</th><th class="num">Δ30d</th><th>Cập nhật</th></tr>` + rows;
+}
+
+/* ───────── brief ───────── */
+const REGIME_COLOR = {
+  "risk-on": "var(--delta-good)", "risk-off": "var(--delta-bad)",
+  "chuyển pha": "var(--status-warning)", "trung tính": "var(--ink-muted)",
+};
+function esc(s) {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+function miniMd(text) {
+  // markdown tối giản: **bold**, "- " thành bullet, xuống dòng thành đoạn
+  const html = esc(text).replace(/\*\*(.+?)\*\*/g, "<b>$1</b>");
+  const out = [];
+  let ul = null;
+  for (const line of html.split("\n")) {
+    const t = line.trim();
+    if (t.startsWith("- ") || t.startsWith("* ")) {
+      if (!ul) { ul = []; }
+      ul.push(`<li>${t.slice(2)}</li>`);
+    } else {
+      if (ul) { out.push(`<ul>${ul.join("")}</ul>`); ul = null; }
+      if (t) out.push(`<p>${t}</p>`);
+    }
+  }
+  if (ul) out.push(`<ul>${ul.join("")}</ul>`);
+  return out.join("");
+}
+
+async function loadBrief() {
+  let data;
+  try { data = await (await fetch("/api/brief")).json(); } catch (e) { return; }
+  const alertsEl = document.getElementById("briefAlerts");
+  alertsEl.innerHTML = (data.alerts || []).map(a =>
+    `<div class="alert-line"><span>⚠️</span><span>${esc(a.message)} <span style="color:var(--ink-muted)">(${a.ts.slice(5, 16).replace("T", " ")} UTC)</span></span></div>`
+  ).join("");
+  if (!data.brief) return;
+  document.getElementById("briefDate").textContent = "· " + data.brief.date;
+  let content = data.brief.content;
+  let regimeHtml = "";
+  const m = content.match(/^REGIME:\s*(.+)$/m);
+  if (m) {
+    const tag = m[1].trim().toLowerCase();
+    const col = REGIME_COLOR[tag] || "var(--ink-muted)";
+    regimeHtml = `<span class="regime-chip"><span class="dot" style="width:8px;height:8px;border-radius:50%;background:${col}"></span>${esc(m[1].trim())}</span>`;
+    content = content.replace(/^REGIME:.*$/m, "").trim();
+  }
+  document.getElementById("briefBody").innerHTML = regimeHtml + miniMd(content);
+}
+
+/* ───────── load & render ───────── */
+async function load() {
+  loadBrief();
+  let data;
+  try {
+    data = await (await fetch("/api/summary")).json();
+  } catch (e) {
+    document.getElementById("updatedAt").textContent = "Không tải được dữ liệu — server có đang chạy?";
+    return;
+  }
+  const ms = data.metrics;
+  document.getElementById("updatedAt").textContent =
+    "cập nhật " + data.generated_at.slice(11, 16) + " UTC";
+
+  hero(document.getElementById("heroBtc"), "price_btc", ms.price_btc, "d1", "24h", ms);
+  hero(document.getElementById("heroFng"), "fear_greed", ms.fear_greed, "d7", "7d", ms);
+
+  for (const g of ["macro", "market", "flows"]) {
+    const el = document.getElementById("grp-" + g);
+    el.innerHTML = "";
+    for (const [k, m] of Object.entries(ms))
+      if (m.group === g) el.appendChild(tile(k, m, ms));
+  }
+  renderTable(ms);
+}
+
+/* ───────── controls ───────── */
+document.getElementById("toggleTable").addEventListener("click", () =>
+  document.getElementById("tableView").classList.toggle("show"));
+
+document.getElementById("toggleTheme").addEventListener("click", () => {
+  const root = document.documentElement;
+  const cur = root.getAttribute("data-theme");
+  const next = cur === "dark" ? "light" : cur === "light" ? "dark"
+    : (matchMedia("(prefers-color-scheme: dark)").matches ? "light" : "dark");
+  root.setAttribute("data-theme", next);
+  try { localStorage.setItem("mm-theme", next); } catch (e) {}
+});
+const qpTheme = new URLSearchParams(location.search).get("theme");
+if (qpTheme === "light" || qpTheme === "dark") {
+  document.documentElement.setAttribute("data-theme", qpTheme);
+} else {
+  try {
+    const saved = localStorage.getItem("mm-theme");
+    if (saved) document.documentElement.setAttribute("data-theme", saved);
+  } catch (e) {}
+}
+
+load();
+setInterval(load, 5 * 60 * 1000);
+</script>
+</body>
+</html>
