@@ -121,8 +121,23 @@ Cảnh báo phát bằng rule cứng 100% — AI không bao giờ là nguồn k�
 
 Ràng buộc trong prompt phản chiếu nguyên tắc mục 1: cấm dự đoán giá, cấm khuyến nghị mua/bán, cấm số ngoài snapshot, chỉ định vị. AI nhận snapshot đã có signal/note tính sẵn (signals.py — cùng ngưỡng mục 3/§7), đầu ra ≤200 từ theo cấu trúc REGIME / Trạng thái / Đáng chú ý / Ngược chiều. Đổi ràng buộc prompt = sửa mục này trước, rồi sửa `INSTRUCTION` trong daily_brief.py.
 
+## 10. Khối "Xoay vòng ngành" (nhịp tuần, nội bộ crypto)
+
+Mục đích: trả lời "tiền đang chảy về đâu *bên trong* crypto" — thông tin cấu trúc thị trường phục vụ hiểu ngành, **không phải máy soi coin**. Theo kế hoạch đầu tư cá nhân (dau-tu-crypto.md §4.2: altcoin 0% đến 2027), khối này KHÔNG sinh tín hiệu mua/bán và không có coin riêng lẻ.
+
+**Danh sách sector (curate thủ công, không lấy top-mcap):** top category theo mcap của CoinGecko toàn nhóm ô dù (layer-1, PoW ≈ BTC/ETH đội lốt) hoặc nhóm rác (made-in-usa). Chọn 9 sector có narrative riêng biệt, không chồng lấn: DeFi (`decentralized-finance-defi`), RWA (`real-world-assets-rwa`), Meme (`meme-token`), AI (`artificial-intelligence`), Oracle (`oracle`), DePIN (`depin`), Layer 2 (`layer-2`), GameFi (`gaming`), Privacy (`privacy-coins`). Thêm/bớt sector = sửa doc này trước, rồi `collectors/sectors.py`.
+
+**Cách đọc:**
+- Thước chính: **excess 7d** = Δ7d% của sector − Δ7d% tổng vốn hóa. Loại bỏ beta thị trường: sector tăng 5% khi cả thị trường tăng 5% là không có thông tin.
+- |excess 7d| ≥ 3pp → đáng chú ý (in đậm + màu delta); dưới đó coi là nhiễu.
+- Ngày đầu chỉ có Δ24h từ API (lịch sử category là API trả phí) — panel ghi rõ "đang tích lũy, đủ 7d sau 1 tuần".
+- **ETH/BTC ratio**: thước khẩu vị rủi ro nội bộ — tăng = tiền nghiêng về nhánh alt, giảm = co về BTC. Signal LUÔN trung tính (tốt/xấu tùy vị thế; kế hoạch hiện tại 0% alt), reading theo Δ30d ±3%.
+
+**Stale**: dữ liệu sector theo ngày, ngưỡng 72h như F&G.
+
 ## Changelog
 
 - **2026-09-28** — Bản đầu tiên: chuyển toàn bộ rule từ code ra doc. Cùng ngày: sửa lỗi đơn vị WTREGEN (net_liquidity) do sanity check phát hiện; bỏ delta cho ETF flows (nhiễu bậc hai); nới STALE_LIMIT cho FRED/ETF theo nhịp công bố thật.
 - **2026-09-28 (chiều)** — Thêm mục 7: màu tín hiệu tile (signalFor) theo góp ý UX — tile đóng box riêng, viền trái + sparkline mang màu xanh lá/đỏ theo kết luận reading, trung tính giữ xanh dương.
 - **2026-09-28 (tối)** — Phase 2: thêm mục 8 (rule cảnh báo + cooldown) và mục 9 (ràng buộc prompt daily brief). Lưu ý: ngưỡng phân loại giờ sống ở HAI bản code (static/index.html cho UI, signals.py cho brief) — cả hai phản chiếu doc này, sửa ngưỡng phải sửa cả ba chỗ.
+- **2026-10-08** — Thêm mục 10: khối "Xoay vòng ngành" (9 sector curate + excess 7d + ETH/BTC). Unlocks loại khỏi scope: DefiLlama emissions đã thành API trả phí.

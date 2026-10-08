@@ -34,6 +34,7 @@ METRICS = {
     "oi_btc_usd":     ("flows",  "Open interest BTC","usd_big"),
     "etf_flow_btc":   ("flows",  "ETF flow BTC",     "musd"),
     "etf_flow_eth":   ("flows",  "ETF flow ETH",     "musd"),
+    "eth_btc":        ("rotation", "ETH/BTC",        "ratio"),
 }
 
 # Trung bình động dài hạn tính từ lịch sử trong DB, đính kèm vào metric giá
@@ -81,6 +82,49 @@ def summary():
         "generated_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "metrics": out,
     })
+
+
+@app.get("/api/sectors")
+def sectors_api():
+    """Xoay vòng ngành (rules.md §10): mcap + Δ7d/Δ30d + excess so với tổng mcap."""
+    import json as _json
+    from collectors.sectors import SECTORS
+    conn = db.connect()
+
+    def pct_change(metric, days):
+        _, cur = db.latest(conn, metric)
+        past = db.value_days_ago(conn, metric, days)
+        if cur is None or not past:
+            return None
+        return (cur / past - 1) * 100
+
+    market_d7 = pct_change("total_mcap", 7)
+    out = []
+    for slug, label in SECTORS.items():
+        metric = f"cat_{slug}"
+        row = conn.execute(
+            "SELECT ts, value, meta FROM metrics WHERE metric=? AND value IS NOT NULL "
+            "ORDER BY ts DESC LIMIT 1", (metric,),
+        ).fetchone()
+        if row is None:
+            continue
+        meta = _json.loads(row["meta"]) if row["meta"] else {}
+        d7 = pct_change(metric, 7)
+        excess = (d7 - market_d7) if (d7 is not None and market_d7 is not None) else None
+        out.append({
+            "slug": slug,
+            "label": meta.get("label", label),
+            "ts": row["ts"],
+            "mcap": row["value"],
+            "change_24h": meta.get("change_24h"),
+            "d7": d7,
+            "d30": pct_change(metric, 30),
+            "excess_d7": excess,
+        })
+    conn.close()
+    # excess giảm dần; chưa đủ lịch sử thì xếp theo mcap
+    out.sort(key=lambda s: (s["excess_d7"] is None, -(s["excess_d7"] or 0), -s["mcap"]))
+    return JSONResponse({"market_d7": market_d7, "sectors": out})
 
 
 @app.get("/api/brief")

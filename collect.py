@@ -18,7 +18,7 @@ except ImportError:
     pass
 
 import db
-from collectors import binance, coingecko, coinmetrics, etf_flows, feargreed, fred
+from collectors import binance, coingecko, coinmetrics, etf_flows, feargreed, fred, sectors
 
 COLLECTORS = {
     "coingecko": coingecko,
@@ -27,6 +27,7 @@ COLLECTORS = {
     "fred": fred,
     "etf_flows": etf_flows,
     "coinmetrics": coinmetrics,
+    "sectors": sectors,
 }
 
 

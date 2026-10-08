@@ -166,6 +166,13 @@ button.info:hover { color: var(--ink-1); border-color: var(--ink-muted); }
 }
 #briefBody { max-height: 240px; overflow-y: auto; padding-right: 4px; }
 
+/* ── xoay vòng ngành ── */
+.rotation-grid { display: grid; grid-template-columns: 280px 1fr; gap: 16px; }
+@media (max-width: 860px) { .rotation-grid { grid-template-columns: 1fr; } }
+#sectorPanel table { font-size: 13px; }
+#sectorPanel .hot { font-weight: 600; }
+#sectorPanel .note { color: var(--ink-muted); font-size: 12px; margin: 6px 0 0; }
+
 /* ── table view ── */
 #tableView { display: none; }
 #tableView.show { display: block; }
@@ -220,6 +227,12 @@ footer { margin-top: 20px; color: var(--ink-muted); font-size: 12px; }
     <div class="card block"><h2>Vĩ mô</h2><div class="tiles" id="grp-macro"></div></div>
     <div class="card block"><h2>Cấu trúc thị trường</h2><div class="tiles" id="grp-market"></div></div>
     <div class="card block" style="grid-column: 1 / -1"><h2>Phái sinh &amp; dòng tiền</h2><div class="tiles" id="grp-flows" style="grid-template-columns:repeat(auto-fill,minmax(240px,1fr))"></div></div>
+    <div class="card block" style="grid-column: 1 / -1"><h2>Xoay vòng ngành · nhịp tuần</h2>
+      <div class="rotation-grid">
+        <div class="tiles" id="grp-rotation" style="grid-template-columns:1fr"></div>
+        <div id="sectorPanel"><p style="color:var(--ink-muted);font-size:13px">Đang tải…</p></div>
+      </div>
+    </div>
   </div>
 
   <!-- table view (accessibility) -->
@@ -245,7 +258,7 @@ const fmt = {
   pct: v => v.toFixed(2) + "%",
   pct8h: v => v.toFixed(4) + "%",
   index: v => v.toFixed(v >= 100 ? 1 : 0),
-  ratio: v => v.toFixed(2),
+  ratio: v => v >= 1 ? v.toFixed(2) : v.toFixed(4),  // MVRV 1.58 · ETH/BTC 0.0319
 };
 function compact(v) {
   const a = Math.abs(v);
@@ -274,11 +287,11 @@ const UP_GOOD = {
   etf_flow_eth: true, net_liquidity: true, stablecoin_mcap: true,
   dxy: false, us10y: false, fed_funds: false, cpi_yoy: false, usdt_dominance: false,
   btc_dominance: null, fear_greed: null, funding_btc: null, funding_eth: null,
-  oi_btc_usd: null, mvrv_btc: null,
+  oi_btc_usd: null, mvrv_btc: null, eth_btc: null,
 };
 
 /* nguồn theo giờ coi là cũ sau 3h; nguồn theo ngày sau 3 ngày */
-const HOURLY = new Set(["price_btc","price_eth","btc_dominance","usdt_dominance","total_mcap","stablecoin_mcap","funding_btc","funding_eth","oi_btc_usd"]);
+const HOURLY = new Set(["price_btc","price_eth","btc_dominance","usdt_dominance","total_mcap","stablecoin_mcap","funding_btc","funding_eth","oi_btc_usd","eth_btc"]);
 
 /* ───────── status rules (rule cứng, không phải AI) ───────── */
 function statusChip(metric, value) {
@@ -374,6 +387,7 @@ const INFO = {
   stablecoin_mcap: { what: "Tổng cung USDT + USDC (~90% thị trường stablecoin).", why: "Cung stablecoin tăng nghĩa là tiền pháp định MỚI thật sự vào ngành — tín hiệu sạch hơn dominance vì không phụ thuộc giá.", read: "Mở rộng = sức mua dự trữ tăng, nền tăng giá bền · Đi ngang/thu hẹp = không có tiền mới." },
   net_liquidity: { what: "Thanh khoản ròng của Fed = tổng tài sản − reverse repo − tài khoản Kho bạc (tỷ USD, FRED).", why: "Là lượng USD thực sự lưu thông trong hệ thống tài chính — bám sát BTC hơn M2 thô trong các chu kỳ gần đây.", read: "Hướng đi là chính: mở rộng = thuận gió cho tài sản rủi ro, thu hẹp = nghịch gió." },
   etf_flow_eth: { what: "Dòng tiền ròng ngày vào các ETF Ethereum spot Mỹ (triệu USD, Farside).", why: "Dòng tổ chức vào nhánh altcoin — so với ETF BTC để biết tổ chức đang ưu tiên nhánh nào.", read: "Xem tổng 7 phiên; cùng chiều với ETF BTC = dòng tổ chức rộng, ngược chiều = xoay trục." },
+  eth_btc: { what: "Tỷ giá ETH/BTC — giá ETH tính bằng BTC.", why: "Thước khẩu vị rủi ro NỘI BỘ crypto: tăng = tiền nghiêng về nhánh alt, giảm = co cụm về BTC. Thông tin cấu trúc, không phải tín hiệu mua bán (kế hoạch hiện tại: altcoin 0% đến 2027).", read: "Đọc hướng 30 ngày; luôn trung tính về tốt/xấu vì phụ thuộc vị thế của bạn." },
 };
 
 /* Vị trí giá trị hiện tại trong chuỗi (0–100, % số ngày có giá trị thấp hơn) */
@@ -498,6 +512,13 @@ function reading(metric, m, all) {
       const last7 = s.slice(-7).reduce((t, p) => t + p.v, 0);
       const dir = last7 > 0 ? "mua ròng" : "bán ròng";
       return `Tổng 7 phiên gần nhất: ${last7 >= 0 ? "+" : "−"}$${compact(Math.abs(last7) * 1e6)} — tổ chức đang ${dir}.`;
+    }
+    case "eth_btc": {
+      if (d30 == null || v === d30) return "Khẩu vị rủi ro nội bộ crypto — đọc hướng 30 ngày.";
+      const chg = d30 / (v - d30) * 100;
+      if (chg >= 3) return `Tăng ${chg.toFixed(1)}%/30d — tiền đang nghiêng về nhánh alt (risk-on nội bộ).`;
+      if (chg <= -3) return `Giảm ${chg.toFixed(1)}%/30d — tiền đang co cụm về BTC (phòng thủ nội bộ).`;
+      return "Đi ngang 30 ngày — chưa có dịch chuyển BTC↔alt đáng kể.";
     }
   }
   return null;
@@ -719,6 +740,35 @@ async function loadBrief() {
   document.getElementById("briefBody").innerHTML = regimeHtml + miniMd(content);
 }
 
+/* ───────── xoay vòng ngành (rules.md §10) ───────── */
+function pctCell(v, { hot = false } = {}) {
+  if (v == null) return `<td class="num" style="color:var(--ink-muted)">—</td>`;
+  const cls = hot && Math.abs(v) >= 3 ? (v > 0 ? "delta good hot" : "delta bad hot") : "delta";
+  return `<td class="num"><span class="${cls}">${v >= 0 ? "▲" : "▼"} ${Math.abs(v).toFixed(1)}%</span></td>`;
+}
+
+async function loadSectors() {
+  let data;
+  try { data = await (await fetch("/api/sectors")).json(); } catch (e) { return; }
+  const panel = document.getElementById("sectorPanel");
+  if (!data.sectors || data.sectors.length === 0) {
+    panel.innerHTML = `<p class="note">Chưa có dữ liệu sector — chạy <code>python collect.py sectors</code>.</p>`;
+    return;
+  }
+  const accumulating = data.sectors.every(s => s.d7 == null);
+  const rows = data.sectors.map(s => `<tr>
+      <td>${esc(s.label)}</td>
+      <td class="num">$${compact(s.mcap)}</td>
+      ${pctCell(s.change_24h)}
+      ${pctCell(s.d7)}
+      ${pctCell(s.excess_d7, { hot: true })}
+    </tr>`).join("");
+  panel.innerHTML = `<table>
+      <tr><th>Sector</th><th class="num">Vốn hóa</th><th class="num">Δ24h</th><th class="num">Δ7d</th><th class="num">Excess 7d</th></tr>
+      ${rows}</table>
+    <p class="note">Excess 7d = Δ7d của sector − Δ7d tổng vốn hóa (${data.market_d7 == null ? "—" : data.market_d7.toFixed(1) + "%"}) — loại bỏ nhịp chung của thị trường. |excess| ≥ 3pp mới đáng chú ý.${accumulating ? " <b>Đang tích lũy lịch sử — cột 7d có số sau ~1 tuần thu thập.</b>" : ""}</p>`;
+}
+
 /* ───────── load & render ───────── */
 async function load() {
   loadBrief();
@@ -736,7 +786,8 @@ async function load() {
   hero(document.getElementById("heroBtc"), "price_btc", ms.price_btc, "d1", "24h", ms);
   hero(document.getElementById("heroFng"), "fear_greed", ms.fear_greed, "d7", "7d", ms);
 
-  for (const g of ["macro", "market", "flows"]) {
+  loadSectors();
+  for (const g of ["macro", "market", "flows", "rotation"]) {
     const el = document.getElementById("grp-" + g);
     el.innerHTML = "";
     for (const [k, m] of Object.entries(ms))

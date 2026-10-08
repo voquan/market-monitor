@@ -86,6 +86,15 @@ def _sig_note(metric, v, d7, d30, series, ma, all_values):
         if p is None: return "neutral", None
         sig = "bad" if p >= 80 else "neutral"
         return sig, f"percentile {p} của 30d"
+    if metric == "eth_btc":
+        if d30 is None or v == d30:
+            return "neutral", None
+        chg = d30 / (v - d30) * 100
+        if chg >= 3:
+            return "neutral", f"+{chg:.1f}%/30d — tiền nghiêng về nhánh alt (risk-on nội bộ)"
+        if chg <= -3:
+            return "neutral", f"{chg:.1f}%/30d — co cụm về BTC (phòng thủ nội bộ)"
+        return "neutral", "đi ngang 30d"
     if metric in ("etf_flow_btc", "etf_flow_eth"):
         if not series: return "neutral", None
         s7 = sum(p["v"] for p in series[-7:])

@@ -29,6 +29,7 @@ def run(conn):
         (ts, "usdt_dominance", g["market_cap_percentage"].get("usdt")),
         (ts, "total_mcap", g["total_market_cap"]["usd"]),
         (ts, "stablecoin_mcap", sum(c["market_cap"] for c in stables)),
+        (ts, "eth_btc", prices["ethereum"]["usd"] / prices["bitcoin"]["usd"]),
     ]
     return base.save(conn, SOURCE, rows)
 
@@ -61,4 +62,13 @@ def backfill(conn, days=365):
     common = set.intersection(*(set(c) for c in charts))
     rows = [(ts, "stablecoin_mcap", sum(c[ts] for c in charts)) for ts in common]
     saved, _ = base.save(conn, SOURCE, rows)
+    total += saved
+    # ETH/BTC ratio: suy từ giá đã lưu trong DB, ngày nào có đủ cả hai
+    btc = {p["d"]: p["v"] for p in db.daily_series(conn, "price_btc", days=days)}
+    ratio_rows = [
+        (p["d"] + "T00:00:00Z", "eth_btc", p["v"] / btc[p["d"]])
+        for p in db.daily_series(conn, "price_eth", days=days)
+        if p["d"] in btc and btc[p["d"]]
+    ]
+    saved, _ = base.save(conn, SOURCE, ratio_rows)
     return total + saved, 0

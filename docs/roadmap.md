@@ -40,6 +40,15 @@ Phase chưa bắt đầu để thô CÓ CHỦ ĐÍCH — chỉ chi tiết hóa k
 
 So sánh trạng thái hiện tại với các giai đoạn lịch sử tương đồng ("giống/khác gì", không phải "giá đi đâu"). Chỉ chi tiết hóa sau khi Phase 2 chạy ổn ≥1 tháng và lịch sử dominance tự tích lũy đủ ~6 tháng.
 
+## Xoay vòng ngành ✅ (triển khai 08/10/2026)
+
+*Khối cấu trúc thị trường nội bộ crypto, nhịp tuần — rules.md §10. Sinh ra từ nhu cầu "tìm coin có dấu hiệu tăng giảm", được tái định hình thành thông tin ngành vì kế hoạch cá nhân chốt altcoin 0% đến 2027.*
+
+- [x] Collector sectors (9 category curate từ CoinGecko) + ETH/BTC ratio (backfill từ giá sẵn có)
+- [x] Panel dashboard: bảng sector xếp theo excess 7d + tile ETH/BTC
+- [ ] Backlog: lịch unlock token (DefiLlama emissions đã thành paid API 10/2026 — tìm nguồn free khác khi rà soát altcoin 2027)
+- [ ] Backlog: screener coin riêng lẻ — CHỈ mở lại ở đợt rà soát altcoin 2027 theo dau-tu-crypto.md §4.2
+
 ## Vận hành / hạ tầng (track song song, làm khi có nhu cầu)
 
 - [x] Đẩy code lên GitHub: https://github.com/voquan/market-monitor (30/09/2026; .env và data/ không lên repo)
@@ -66,4 +75,5 @@ So sánh trạng thái hiện tại với các giai đoạn lịch sử tương 
 | 28/09 | Quy trình doc-trước-code-sau cho mọi rule | Để 6 tháng sau còn biết vì sao funding 0.05 là "nóng"; code phản chiếu docs/rules.md |
 | 28/09 | Provider brief mặc định = Claude Code headless (claude_cli), tách tầng providers.py | Free thực tế (subscription sẵn có), chất lượng cao nhất; đổi provider = đổi env. Máy chạy cron phải đăng nhập Claude Code |
 | 28/09 | Snapshot cho AI mang signal/note tính sẵn (signals.py), không đưa số thô | Model nhỏ/free đủ dùng, giảm rủi ro bịa số; đánh đổi: ngưỡng tồn tại ở 2 bản code (JS + Python) cùng phản chiếu rules.md |
+| 08/10 | "Tìm coin tăng giảm" → tái định hình thành khối "Xoay vòng ngành" nhịp tuần, KHÔNG làm screener coin | Kế hoạch cá nhân chốt altcoin 0% đến 2027 + "chi phí ẩn lớn nhất là sự chú ý" (dau-tu-crypto.md). Sector curate thủ công vì top-mcap của CoinGecko toàn nhóm ô dù; đo bằng excess 7d để loại beta thị trường |
 | 28/09 | Brief chạy Gemini `gemini-3.1-flash-lite` (pin trong .env), không dùng alias `-latest` | User chưa muốn cài Claude CLI; các model flash thường 503 "high demand" với request dài trên free tier, flash-lite ổn định; key dạng `AQ.*` chỉ nhận qua header `x-goog-api-key` |

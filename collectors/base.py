@@ -30,7 +30,20 @@ SANITY = {
     "mvrv_btc": (0.3, 10),
     "stablecoin_mcap": (5e10, 1.5e12),
     "net_liquidity": (2_000, 12_000), # tỷ USD
+    "eth_btc": (0.005, 0.2),          # ratio ETH/BTC
 }
+
+# Sector mcap (cat_<slug>, rules.md §10) — slug động nên check theo prefix
+PREFIX_SANITY = {"cat_": (1e8, 5e12)}
+
+
+def _range(metric):
+    if metric in SANITY:
+        return SANITY[metric]
+    for prefix, rng in PREFIX_SANITY.items():
+        if metric.startswith(prefix):
+            return rng
+    return (None, None)
 
 
 def get_json(url, params=None, headers=None):
@@ -57,7 +70,7 @@ def save(conn, source, rows):
     for row in rows:
         ts, metric, value = row[0], row[1], row[2]
         meta = json.dumps(row[3]) if len(row) > 3 and row[3] else None
-        lo, hi = SANITY.get(metric, (None, None))
+        lo, hi = _range(metric)
         if value is None or (lo is not None and not (lo <= value <= hi)):
             print(f"  [!] {source}.{metric}={value} ngoài sanity range, bỏ qua")
             rejected += 1
