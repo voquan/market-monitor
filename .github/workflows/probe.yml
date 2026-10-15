@@ -1,0 +1,15 @@
+name: probe
+on: workflow_dispatch
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Probe derivatives APIs
+        run: |
+          probe() { echo "$1 => $(curl -s -o /dev/null -w '%{http_code}' --max-time 15 "$2")"; }
+          probe binance "https://fapi.binance.com/fapi/v1/premiumIndex?symbol=BTCUSDT"
+          probe bybit "https://api.bybit.com/v5/market/tickers?category=linear&symbol=BTCUSDT"
+          probe okx "https://www.okx.com/api/v5/public/funding-rate?instId=BTC-USDT-SWAP"
+          probe kraken "https://futures.kraken.com/derivatives/api/v3/tickers"
+          echo "hyperliquid => $(curl -s -o /dev/null -w '%{http_code}' --max-time 15 -X POST -H 'Content-Type: application/json' -d '{"type":"metaAndAssetCtxs"}' https://api.hyperliquid.xyz/info)"
