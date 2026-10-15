@@ -5,6 +5,12 @@
 import os
 from datetime import datetime, timezone
 
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
+
 from fastapi import FastAPI
 from fastapi.responses import FileResponse, JSONResponse
 

@@ -37,7 +37,7 @@ python collect.py                # thu thập dữ liệu mới
 uvicorn app:app --port 8388      # mở dashboard: http://localhost:8388
 ```
 
-Chạy từng nguồn: `python collect.py coingecko binance`. Thêm `-v` để xem traceback khi lỗi.
+Chạy từng nguồn: `python collect.py coingecko bybit`. Thêm `-v` để xem traceback khi lỗi.
 
 ## Daily brief + cảnh báo (giai đoạn 2)
 
@@ -72,7 +72,7 @@ Setup một lần:
 
 ```cron
 # Mỗi giờ: nguồn nhanh
-0 * * * * cd /Volumes/Datas/Coding/inmag/tools/market_monitor && .venv/bin/python collect.py coingecko binance >> data/collect.log 2>&1
+0 * * * * cd /Volumes/Datas/Coding/inmag/tools/market_monitor && .venv/bin/python collect.py coingecko bybit >> data/collect.log 2>&1
 # 7h sáng hằng ngày: nguồn chậm
 0 7 * * * cd /Volumes/Datas/Coding/inmag/tools/market_monitor && .venv/bin/python collect.py feargreed fred etf_flows coinmetrics >> data/collect.log 2>&1
 # 7h15: daily brief (sau collect); 5 phút sau mỗi giờ: cảnh báo
