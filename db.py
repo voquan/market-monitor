@@ -160,37 +160,54 @@ def upsert_metric(conn, ts, source, metric, value, meta=None):
     )
 
 
+# ─── SQL builders: trả về (sql, params) để dùng đơn lẻ hoặc batch ───
+
+def latest_q(metric):
+    return ("SELECT ts, value FROM metrics WHERE metric=? AND value IS NOT NULL "
+            "ORDER BY ts DESC LIMIT 1", (metric,))
+
+
+def days_ago_q(metric, days, tolerance_days=5):
+    # Dung sai rộng để chỉ số tháng (M2, CPI) vẫn có delta 30 ngày
+    target = datetime.now(timezone.utc) - timedelta(days=days)
+    floor = target - timedelta(days=tolerance_days)
+    return ("SELECT value FROM metrics WHERE metric=? AND value IS NOT NULL "
+            "AND ts<=? AND ts>=? ORDER BY ts DESC LIMIT 1",
+            (metric, iso(target), iso(floor)))
+
+
+def series_q(metric, days=90):
+    since = iso(datetime.now(timezone.utc) - timedelta(days=days))
+    return ("SELECT substr(ts,1,10) AS d, value FROM metrics "
+            "WHERE metric=? AND value IS NOT NULL AND ts>=? "
+            "GROUP BY d HAVING ts=MAX(ts) ORDER BY d", (metric, since))
+
+
+def run_batch(conn, queries):
+    """Chạy nhiều SELECT; Turso gom thành MỘT HTTP round trip.
+
+    queries: list (sql, params). Trả về list kết quả (list rows) cùng thứ tự.
+    Đây là lý do dashboard online tải nhanh — xem nhật ký quyết định 15/10.
+    """
+    if isinstance(conn, TursoConn):
+        return conn.pipeline(
+            [{"sql": s, "args": [TursoConn._arg(p) for p in ps]} for s, ps in queries]
+        )
+    return [conn.execute(s, ps).fetchall() for s, ps in queries]
+
+
 def latest(conn, metric):
-    row = conn.execute(
-        "SELECT ts, value FROM metrics WHERE metric=? AND value IS NOT NULL "
-        "ORDER BY ts DESC LIMIT 1",
-        (metric,),
-    ).fetchone()
+    row = conn.execute(*latest_q(metric)).fetchone()
     return (row["ts"], row["value"]) if row else (None, None)
 
 
 def value_days_ago(conn, metric, days, tolerance_days=5):
-    """Giá trị gần nhất TRƯỚC mốc (now - days), trong khoảng dung sai.
-
-    Dung sai rộng để chỉ số tháng (M2, CPI) vẫn có delta 30 ngày.
-    """
-    target = datetime.now(timezone.utc) - timedelta(days=days)
-    floor = target - timedelta(days=tolerance_days)
-    row = conn.execute(
-        "SELECT value FROM metrics WHERE metric=? AND value IS NOT NULL "
-        "AND ts<=? AND ts>=? ORDER BY ts DESC LIMIT 1",
-        (metric, iso(target), iso(floor)),
-    ).fetchone()
+    """Giá trị gần nhất TRƯỚC mốc (now - days), trong khoảng dung sai."""
+    row = conn.execute(*days_ago_q(metric, days, tolerance_days)).fetchone()
     return row["value"] if row else None
 
 
 def daily_series(conn, metric, days=90):
     """Chuỗi 1 điểm/ngày (giá trị cuối ngày) cho sparkline."""
-    since = iso(datetime.now(timezone.utc) - timedelta(days=days))
-    rows = conn.execute(
-        "SELECT substr(ts,1,10) AS d, value FROM metrics "
-        "WHERE metric=? AND value IS NOT NULL AND ts>=? "
-        "GROUP BY d HAVING ts=MAX(ts) ORDER BY d",
-        (metric, since),
-    ).fetchall()
+    rows = conn.execute(*series_q(metric, days)).fetchall()
     return [{"d": r["d"], "v": r["value"]} for r in rows]

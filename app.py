@@ -47,90 +47,135 @@ METRICS = {
 MA_WINDOWS = {"price_btc": 200, "price_eth": 200}
 
 
-def moving_average(conn, metric, window):
-    row = conn.execute(
-        "SELECT AVG(v), COUNT(*) FROM (SELECT value AS v FROM ("
+# CDN cache: dữ liệu đổi theo giờ, cache 5 phút + serve-stale là quá đủ.
+# Lý do tồn tại: Turso ở xa thì mỗi lần dựng summary vẫn tốn ~1s — cache đỡ hộ.
+CACHE = {"Cache-Control": "s-maxage=300, stale-while-revalidate=600"}
+
+MA_Q = ("SELECT AVG(v), COUNT(*) FROM (SELECT value AS v FROM ("
         "  SELECT substr(ts,1,10) AS d, value FROM metrics"
         "  WHERE metric=? AND value IS NOT NULL GROUP BY d HAVING ts=MAX(ts)"
-        "  ORDER BY d DESC LIMIT ?))",
-        (metric, window),
-    ).fetchone()
-    avg, n = row
+        "  ORDER BY d DESC LIMIT ?))")
+
+
+def moving_average(conn, metric, window):
+    """Bản gọi đơn lẻ (signals.py dùng); summary() dùng MA_Q qua batch."""
+    row = conn.execute(MA_Q, (metric, window)).fetchone()
+    avg, n = (row[0], row[1]) if row else (None, 0)
     # thiếu dữ liệu thì MA méo — chấp nhận hụt tối đa 5% số ngày
-    return avg if n >= window * 0.95 else None
+    return avg if (avg is not None and n >= window * 0.95) else None
 
 
 @app.get("/api/summary")
 def summary():
+    """Toàn bộ query của trang gom thành MỘT round trip tới Turso (db.run_batch)."""
     conn = db.connect()
+    queries = []
+    for metric in METRICS:
+        queries.append(db.latest_q(metric))
+        for days in (1, 7, 30):
+            queries.append(db.days_ago_q(metric, days))
+        queries.append(db.series_q(metric, 90))
+        if metric in MA_WINDOWS:
+            queries.append((MA_Q, (metric, MA_WINDOWS[metric])))
+    results = iter(db.run_batch(conn, queries))
+    conn.close()
+
+    def one(rows):
+        return rows[0] if rows else None
+
     out = {}
     for metric, (group, label, unit) in METRICS.items():
-        ts, value = db.latest(conn, metric)
+        latest = one(next(results))
+        ts, value = (latest["ts"], latest["value"]) if latest else (None, None)
         deltas = {}
-        if value is not None:
-            for key, days in [("d1", 1), ("d7", 7), ("d30", 30)]:
-                past = db.value_days_ago(conn, metric, days)
-                deltas[key] = None if past is None else value - past
+        for key in ("d1", "d7", "d30"):
+            past = one(next(results))
+            deltas[key] = (value - past["value"]) if (value is not None and past) else None
+        series = [{"d": r["d"], "v": r["value"]} for r in next(results)]
         out[metric] = {
-            "group": group,
-            "label": label,
-            "unit": unit,
-            "ts": ts,
-            "value": value,
-            "deltas": deltas,
-            "series": db.daily_series(conn, metric, days=90),
+            "group": group, "label": label, "unit": unit,
+            "ts": ts, "value": value,
+            "deltas": deltas if value is not None else {},
+            "series": series,
         }
-        if metric in MA_WINDOWS and value is not None:
-            out[metric]["ma"] = moving_average(conn, metric, MA_WINDOWS[metric])
-            out[metric]["ma_window"] = MA_WINDOWS[metric]
-    conn.close()
+        if metric in MA_WINDOWS:
+            ma_row = one(next(results))
+            avg, n = (ma_row[0], ma_row[1]) if ma_row else (None, 0)
+            # thiếu dữ liệu thì MA méo — chấp nhận hụt tối đa 5% số ngày
+            if value is not None and avg is not None and n >= MA_WINDOWS[metric] * 0.95:
+                out[metric]["ma"] = avg
+                out[metric]["ma_window"] = MA_WINDOWS[metric]
     return JSONResponse({
         "generated_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "metrics": out,
-    })
+    }, headers=CACHE)
 
 
 @app.get("/api/sectors")
 def sectors_api():
-    """Xoay vòng ngành (rules.md §10): mcap + Δ7d/Δ30d + excess so với tổng mcap."""
+    """Xoay vòng ngành (rules.md §10): mcap + Δ7d/Δ30d + excess — 1 round trip."""
     import json as _json
     from collectors.sectors import SECTORS
     conn = db.connect()
 
-    def pct_change(metric, days):
-        _, cur = db.latest(conn, metric)
-        past = db.value_days_ago(conn, metric, days)
-        if cur is None or not past:
-            return None
-        return (cur / past - 1) * 100
+    LATEST_META = ("SELECT ts, value, meta FROM metrics WHERE metric=? AND value IS NOT NULL "
+                   "ORDER BY ts DESC LIMIT 1")
+    metrics = ["total_mcap"] + [f"cat_{slug}" for slug in SECTORS]
+    queries = []
+    for m in metrics:
+        queries.append((LATEST_META, (m,)))
+        queries.append(db.days_ago_q(m, 7))
+        queries.append(db.days_ago_q(m, 30))
+        queries.append(db.series_q(m, 35))
+    results = iter(db.run_batch(conn, queries))
+    conn.close()
 
-    market_d7 = pct_change("total_mcap", 7)
+    def pct(cur, past_rows):
+        past = past_rows[0]["value"] if past_rows else None
+        return (cur / past - 1) * 100 if (cur is not None and past) else None
+
+    def broken(series):
+        """Gãy chuỗi do CoinGecko đổi thành phần category — rules.md §10."""
+        vals = [r["value"] for r in series]
+        return any(
+            prev and abs(cur / prev - 1) > 0.20
+            for prev, cur in zip(vals, vals[1:])
+        )
+
+    data = {}
+    for m in metrics:
+        row = next(results)
+        row = row[0] if row else None
+        cur = row["value"] if row else None
+        d7, d30 = pct(cur, next(results)), pct(cur, next(results))
+        series = next(results)
+        is_broken = m != "total_mcap" and broken(series)
+        if is_broken:
+            d7 = d30 = None
+        data[m] = {"row": row, "d7": d7, "d30": d30, "broken": is_broken}
+
+    market_d7 = data["total_mcap"]["d7"]
     out = []
     for slug, label in SECTORS.items():
-        metric = f"cat_{slug}"
-        row = conn.execute(
-            "SELECT ts, value, meta FROM metrics WHERE metric=? AND value IS NOT NULL "
-            "ORDER BY ts DESC LIMIT 1", (metric,),
-        ).fetchone()
-        if row is None:
+        d = data[f"cat_{slug}"]
+        if d["row"] is None:
             continue
-        meta = _json.loads(row["meta"]) if row["meta"] else {}
-        d7 = pct_change(metric, 7)
-        excess = (d7 - market_d7) if (d7 is not None and market_d7 is not None) else None
+        meta = _json.loads(d["row"]["meta"]) if d["row"]["meta"] else {}
+        excess = (d["d7"] - market_d7) if (d["d7"] is not None and market_d7 is not None) else None
         out.append({
             "slug": slug,
             "label": meta.get("label", label),
-            "ts": row["ts"],
-            "mcap": row["value"],
+            "ts": d["row"]["ts"],
+            "mcap": d["row"]["value"],
             "change_24h": meta.get("change_24h"),
-            "d7": d7,
-            "d30": pct_change(metric, 30),
+            "d7": d["d7"],
+            "d30": d["d30"],
             "excess_d7": excess,
+            "broken": d["broken"],
         })
-    conn.close()
     # excess giảm dần; chưa đủ lịch sử thì xếp theo mcap
     out.sort(key=lambda s: (s["excess_d7"] is None, -(s["excess_d7"] or 0), -s["mcap"]))
-    return JSONResponse({"market_d7": market_d7, "sectors": out})
+    return JSONResponse({"market_d7": market_d7, "sectors": out}, headers=CACHE)
 
 
 @app.get("/api/brief")
@@ -151,7 +196,7 @@ def brief():
     return JSONResponse({
         "brief": {"date": row["date"], "content": row["content"]} if row else None,
         "alerts": alerts,
-    })
+    }, headers=CACHE)
 
 
 @app.get("/")

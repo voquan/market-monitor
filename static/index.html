@@ -755,9 +755,10 @@ async function loadSectors() {
     panel.innerHTML = `<p class="note">Chưa có dữ liệu sector — chạy <code>python collect.py sectors</code>.</p>`;
     return;
   }
-  const accumulating = data.sectors.every(s => s.d7 == null);
+  const accumulating = data.sectors.every(s => s.d7 == null && !s.broken);
+  const anyBroken = data.sectors.some(s => s.broken);
   const rows = data.sectors.map(s => `<tr>
-      <td>${esc(s.label)}</td>
+      <td>${esc(s.label)}${s.broken ? ' <span title="CoinGecko đổi thành phần category — Δ7d/Δ30d bị ẩn vì chuỗi gãy">⚠</span>' : ""}</td>
       <td class="num">$${compact(s.mcap)}</td>
       ${pctCell(s.change_24h)}
       ${pctCell(s.d7)}
@@ -766,7 +767,7 @@ async function loadSectors() {
   panel.innerHTML = `<table>
       <tr><th>Sector</th><th class="num">Vốn hóa</th><th class="num">Δ24h</th><th class="num">Δ7d</th><th class="num">Excess 7d</th></tr>
       ${rows}</table>
-    <p class="note">Excess 7d = Δ7d của sector − Δ7d tổng vốn hóa (${data.market_d7 == null ? "—" : data.market_d7.toFixed(1) + "%"}) — loại bỏ nhịp chung của thị trường. |excess| ≥ 3pp mới đáng chú ý.${accumulating ? " <b>Đang tích lũy lịch sử — cột 7d có số sau ~1 tuần thu thập.</b>" : ""}</p>`;
+    <p class="note">Excess 7d = Δ7d của sector − Δ7d tổng vốn hóa (${data.market_d7 == null ? "—" : data.market_d7.toFixed(1) + "%"}) — loại bỏ nhịp chung của thị trường. |excess| ≥ 3pp mới đáng chú ý.${accumulating ? " <b>Đang tích lũy lịch sử — cột 7d có số sau ~1 tuần thu thập.</b>" : ""}${anyBroken ? " ⚠ = CoinGecko đổi thành phần category, Δ bị ẩn vì chuỗi gãy (rules.md §10)." : ""}</p>`;
 }
 
 /* ───────── load & render ───────── */

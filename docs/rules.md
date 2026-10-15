@@ -133,6 +133,8 @@ Mục đích: trả lời "tiền đang chảy về đâu *bên trong* crypto" �
 - Ngày đầu chỉ có Δ24h từ API (lịch sử category là API trả phí) — panel ghi rõ "đang tích lũy, đủ 7d sau 1 tuần".
 - **ETH/BTC ratio**: thước khẩu vị rủi ro nội bộ — tăng = tiền nghiêng về nhánh alt, giảm = co về BTC. Signal LUÔN trung tính (tốt/xấu tùy vị thế; kế hoạch hiện tại 0% alt), reading theo Δ30d ±3%.
 
+**Gãy chuỗi (composition break)**: CoinGecko thỉnh thoảng đổi thành phần category (phát hiện 15/10: RWA nhảy 53B→77B→54B qua ngày trong khi change_24h của chính họ chỉ ±1%). Rule: trong cửa sổ 35 ngày, nếu có bước nhảy ngày-qua-ngày >20% thì **ẩn Δ7d/Δ30d/excess của sector đó** (hiện "—" + ghi chú), chỉ giữ mcap và Δ24h của CoinGecko. Thà thiếu còn hơn sai. Fix triệt để (giỏ coin cố định tự quản) nằm trong backlog roadmap.
+
 **Stale**: dữ liệu sector theo ngày, ngưỡng 72h như F&G.
 
 ## Changelog
