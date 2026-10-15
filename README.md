@@ -54,7 +54,19 @@ Provider chọn qua `BRIEF_PROVIDER` trong `.env` — **hiện đang dùng `gemi
 
 Telegram (tùy chọn): điền `TELEGRAM_BOT_TOKEN` + `TELEGRAM_CHAT_ID` theo hướng dẫn trong `.env.example` để nhận brief + cảnh báo trên điện thoại.
 
-## Tự động thu thập (cron, macOS)
+## Chạy online (GitHub Actions + Turso + Vercel)
+
+Kiến trúc: Actions cron thu thập + brief → ghi **Turso** (SQLite hosted) → Vercel serve dashboard. Local vẫn chạy file SQLite như cũ khi không đặt biến Turso.
+
+Setup một lần:
+
+1. **Turso**: tạo database (region Singapore/Tokyo cho gần VN) → lấy `TURSO_DATABASE_URL` (libsql://...) + tạo `TURSO_AUTH_TOKEN`. Điền 2 biến vào `.env` rồi di cư lịch sử: `python migrate_to_turso.py` (chạy lại an toàn, có đối chiếu số dòng).
+2. **GitHub secrets** (Settings → Secrets and variables → Actions): `TURSO_DATABASE_URL`, `TURSO_AUTH_TOKEN`, `FRED_API_KEY`, `GEMINI_API_KEY` (+ `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID` nếu dùng). Hai workflow trong `.github/workflows/` tự chạy: hourly (collect nhanh + alerts) và daily 07:05 VN (collect chậm + brief). Workflow fail = GitHub gửi email — đó là kênh báo động collector vỡ.
+3. **Vercel**: import repo, thêm env `TURSO_DATABASE_URL` + `TURSO_AUTH_TOKEN` — `vercel.json` + `api/index.py` đã cấu hình sẵn (region sin1).
+
+⚠️ Sau khi chuyển: Turso là nguồn chuẩn, `data/market.db` local thành bản snapshot tại thời điểm di cư. Chạy local muốn nhìn dữ liệu online thì đặt 2 biến Turso trong `.env`.
+
+## Tự động thu thập (cron, macOS — chỉ khi chạy local thuần)
 
 `crontab -e` rồi thêm (sửa đường dẫn cho đúng máy):
 

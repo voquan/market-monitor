@@ -1,10 +1,14 @@
-"""SQLite storage cho Market Monitor.
+"""Storage cho Market Monitor: SQLite local, hoặc Turso khi chạy online.
 
-Một file data/market.db duy nhất. Schema xem kien-truc.md.
+- Local (mặc định): một file data/market.db. Schema xem kien-truc.md.
+- Online: đặt TURSO_DATABASE_URL + TURSO_AUTH_TOKEN -> cùng schema trên Turso,
+  nói chuyện qua HTTP pipeline API (không cần native lib, chạy được mọi nơi).
 """
 import os
 import sqlite3
 from datetime import datetime, timedelta, timezone
+
+import requests
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DB_PATH = os.environ.get("MM_DB_PATH", os.path.join(BASE_DIR, "data", "market.db"))
@@ -36,11 +40,109 @@ CREATE TABLE IF NOT EXISTS alerts (
 
 
 def connect():
+    if os.environ.get("TURSO_DATABASE_URL"):
+        return TursoConn(os.environ["TURSO_DATABASE_URL"], os.environ["TURSO_AUTH_TOKEN"])
     os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     conn.executescript(SCHEMA)
     return conn
+
+
+# ─── Turso: adapter HTTP tối giản, cùng interface với sqlite3 ───
+
+class Row:
+    """Hàng kết quả: truy cập được cả row["col"], row[0] và unpack như tuple."""
+    def __init__(self, cols, vals):
+        self._cols, self._vals = cols, vals
+
+    def __getitem__(self, k):
+        return self._vals[k] if isinstance(k, int) else self._vals[self._cols.index(k)]
+
+    def __iter__(self):
+        return iter(self._vals)
+
+    def keys(self):
+        return self._cols
+
+
+class _Cursor:
+    def __init__(self, rows):
+        self._rows = rows
+
+    def fetchone(self):
+        return self._rows[0] if self._rows else None
+
+    def fetchall(self):
+        return self._rows
+
+    def __iter__(self):
+        return iter(self._rows)
+
+
+class TursoConn:
+    _schema_ready = set()  # url đã chạy schema trong process này
+
+    def __init__(self, url, token):
+        if url.startswith("libsql://"):
+            url = "https://" + url[len("libsql://"):]
+        self._url = url.rstrip("/") + "/v2/pipeline"
+        self._s = requests.Session()
+        self._s.headers["Authorization"] = f"Bearer {token}"
+        if self._url not in TursoConn._schema_ready:
+            self.executescript(SCHEMA)
+            TursoConn._schema_ready.add(self._url)
+
+    @staticmethod
+    def _arg(v):
+        if v is None:
+            return {"type": "null"}
+        if isinstance(v, bool):
+            return {"type": "integer", "value": str(int(v))}
+        if isinstance(v, int):
+            return {"type": "integer", "value": str(v)}
+        if isinstance(v, float):
+            return {"type": "float", "value": v}
+        return {"type": "text", "value": str(v)}
+
+    @staticmethod
+    def _val(cell):
+        t = cell["type"]
+        if t == "null":
+            return None
+        if t == "integer":
+            return int(cell["value"])  # Turso trả integer dạng chuỗi
+        if t == "float":
+            return float(cell["value"])
+        return cell["value"]
+
+    def pipeline(self, stmts):
+        """stmts: list {"sql":..., "args":[...]} — nhiều lệnh trong 1 round trip."""
+        reqs = [{"type": "execute", "stmt": s} for s in stmts] + [{"type": "close"}]
+        r = self._s.post(self._url, json={"requests": reqs}, timeout=60)
+        r.raise_for_status()
+        out = []
+        for res in r.json()["results"]:
+            if res["type"] == "error":
+                raise RuntimeError(f"Turso: {res['error'].get('message')}")
+            if res["type"] == "ok" and res["response"]["type"] == "execute":
+                rr = res["response"]["result"]
+                cols = [c["name"] for c in rr["cols"]]
+                out.append([Row(cols, [self._val(c) for c in row]) for row in rr["rows"]])
+        return out
+
+    def execute(self, sql, params=()):
+        rows = self.pipeline([{"sql": sql, "args": [self._arg(p) for p in params]}])
+        return _Cursor(rows[0] if rows else [])
+
+    def executescript(self, script):
+        self.pipeline([{"sql": s.strip(), "args": []} for s in script.split(";") if s.strip()])
+
+    def commit(self):
+        pass  # mỗi pipeline tự commit
+
+    def close(self):
+        self._s.close()
 
 
 def iso(dt):
