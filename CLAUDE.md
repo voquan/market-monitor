@@ -10,7 +10,7 @@ Dashboard cá nhân theo dõi thị trường crypto (vĩ mô, định giá chu 
 
 ## Trạng thái
 
-**Nguồn chuẩn về tiến độ + việc cần làm + nhật ký quyết định: `docs/roadmap.md`** — đọc file đó, đừng suy từ code. Tóm tắt 1 dòng (28/09/2026): Phase 1 + Phase 2 hoạt động — brief chạy Gemini free tier (model pin trong `.env`), còn thiếu cron (thu thập + brief + alerts đều đang chạy tay); local port 8388.
+**Nguồn chuẩn về tiến độ + việc cần làm + nhật ký quyết định: `docs/roadmap.md`** — đọc file đó, đừng suy từ code. Tóm tắt 1 dòng (15/10/2026): CHẠY ONLINE hoàn chỉnh — GitHub Actions cron (hourly + daily 07:05 VN) → Turso → Vercel (https://market-monitor-vo-quans-projects.vercel.app, có Deployment Protection); local port 8388 đọc cùng Turso qua .env; data/market.db = snapshot cũ.
 
 Khi hoàn thành việc gì: tick trong `docs/roadmap.md`; quyết định có lý do đáng nhớ → thêm vào Nhật ký quyết định trong đó; thay đổi lớn → cập nhật dòng tóm tắt ở trên.
 
