@@ -24,6 +24,6 @@ jobs:
           cache: pip
       - run: pip install -r requirements.txt
       - name: Thu thập nguồn theo giờ
-        run: python collect.py coingecko bybit
+        run: python collect.py coingecko okx
       - name: Kiểm tra rule cảnh báo
         run: python alerts.py
