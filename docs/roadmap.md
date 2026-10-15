@@ -52,8 +52,9 @@ So sánh trạng thái hiện tại với các giai đoạn lịch sử tương 
 ## Vận hành / hạ tầng (track song song, làm khi có nhu cầu)
 
 - [x] Đẩy code lên GitHub: https://github.com/voquan/market-monitor (30/09/2026; .env và data/ không lên repo)
-- [ ] GitHub Actions cron cho collectors + brief (cần thêm secrets FRED_API_KEY, GEMINI_API_KEY vào repo settings)
-- [ ] Nơi chứa dữ liệu khi chạy online: Turso, hoặc commit db vào repo private ([kien-truc.md](kien-truc.md) §1)
+- [x] Hạ tầng online (15/10/2026): Turso adapter HTTP trong db.py (local vẫn file SQLite), migrate_to_turso.py, 2 workflow Actions (hourly + daily 07:05 VN), api/index.py + vercel.json (sin1)
+- [ ] **Kích hoạt online (chờ người dùng)**: tạo DB Turso → điền 2 biến vào .env → `python migrate_to_turso.py` → thêm 4 secrets vào GitHub (TURSO_DATABASE_URL, TURSO_AUTH_TOKEN, FRED_API_KEY, GEMINI_API_KEY) → import repo vào Vercel + 2 env Turso
+- [ ] Online chạy ổn ~1 tuần → coi Turso là nguồn chuẩn, market.db local = snapshot tại ngày di cư
 - [ ] Nơi xem dashboard online (Vercel/Fly, hoặc static export + GitHub Pages)
 - Backlog chỉ số mới: xem [khung-danh-gia.md](khung-danh-gia.md) (FedWatch, exchange netflow, ETH/BTC...)
 
